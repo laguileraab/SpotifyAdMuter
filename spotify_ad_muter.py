@@ -1,6 +1,6 @@
 """Tray app that mutes Spotify (and only Spotify) while an ad is playing.
 
-Detection: Spotify reports ads to the Windows media controls with no artist.
+Detection: Spotify reports ads to the Windows media controls with no album.
 As a fallback, while a track plays the Spotify window title is "Artist - Title",
 and during ads it loses the " - " separator. Muting is done on Spotify's own
 audio session in the Windows volume mixer, so other apps are unaffected.
@@ -66,6 +66,7 @@ def spotify_title(pids: set[int]) -> str | None:
 class MediaInfo:
     playing: bool
     artist: str
+    album: str
 
 
 class SpotifyMedia:
@@ -80,16 +81,16 @@ class SpotifyMedia:
             if "spotify" in session.source_app_user_model_id.lower():
                 props = self.loop.run_until_complete(session.try_get_media_properties_async())
                 status = session.get_playback_info().playback_status
-                return MediaInfo(status == PlaybackStatus.PLAYING, props.artist or "")
+                return MediaInfo(status == PlaybackStatus.PLAYING, props.artist or "", props.album_title or "")
         return None
 
 
 def is_ad(title: str | None, media: MediaInfo | None) -> bool:
-    # Ads, including Spotify's own promos, are reported with no artist.
+    # Ads are reported with no album; the advertiser (or nothing) is the artist.
     if media is not None:
         if not media.playing:
             return False
-        if not media.artist:
+        if not media.artist or not media.album:
             return True
     return title is not None and title not in PAUSED_TITLES and " - " not in title
 

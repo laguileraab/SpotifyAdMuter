@@ -29,11 +29,11 @@ Windows may tuck new tray icons into the hidden-icons area (the `^` arrow). Drag
 
 ## How it works
 
-Spotify reports what it's playing to the Windows media controls (the panel that appears next to the volume flyout). Songs and podcast episodes always have an artist; ads don't. As a fallback, the app also checks the Spotify window title, which reads `Artist - Song` for music and changes to things like `—` or `Advertisement` during ads.
+Spotify reports what it's playing to the Windows media controls (the panel that appears next to the volume flyout). Songs always come with an album; ads never do (the "artist" is the advertiser, or empty). As a fallback, the app also checks the Spotify window title, which reads `Artist - Song` for music and changes to things like `—` or `Advertisement` during ads.
 
 When an ad is detected, the app mutes Spotify's own audio session in the Windows volume mixer, then unmutes it as soon as music is back.
 
-Local files without an artist tag will be treated as ads. If an ad slips through, feel free to open an issue.
+Local files without an artist or album tag will be treated as ads. If an ad slips through, feel free to open an issue.
 
 ## Running from source
 
