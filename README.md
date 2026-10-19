@@ -29,9 +29,11 @@ Windows may tuck new tray icons into the hidden-icons area (the `^` arrow). Drag
 
 ## How it works
 
-While a song plays, the Spotify desktop window title is `Artist - Song`. During ads it changes to things like `Advertisement`, `Spotify`, or the advertiser's name. When the title no longer looks like a song (and Spotify isn't simply paused), the app mutes Spotify's own audio session in the Windows volume mixer.
+Spotify reports what it's playing to the Windows media controls (the panel that appears next to the volume flyout). Songs and podcast episodes always have an artist; ads don't. As a fallback, the app also checks the Spotify window title, which reads `Artist - Song` for music and changes to things like `—` or `Advertisement` during ads.
 
-If an ad's title happens to contain ` - `, it won't be detected. Feel free to open an issue with the title you saw.
+When an ad is detected, the app mutes Spotify's own audio session in the Windows volume mixer, then unmutes it as soon as music is back.
+
+Local files without an artist tag will be treated as ads. If an ad slips through, feel free to open an issue.
 
 ## Running from source
 

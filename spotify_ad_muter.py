@@ -1,18 +1,19 @@
 """Tray app that mutes Spotify (and only Spotify) while an ad is playing.
 
-Detection: while a track plays, the Spotify window title is "Artist - Title".
-During ads it changes to "Advertisement", "Spotify", or the advertiser name
-without the " - " separator. Muting is done on Spotify's own audio session in
-the Windows volume mixer, so other apps are unaffected.
+Detection: Spotify reports ads to the Windows media controls with no artist.
+As a fallback, while a track plays the Spotify window title is "Artist - Title",
+and during ads it loses the " - " separator. Muting is done on Spotify's own
+audio session in the Windows volume mixer, so other apps are unaffected.
 
 The process idles in the background and the tray icon only appears while
 Spotify is running.
 """
 
+import asyncio
 import sys
 import threading
-import time
 import winreg
+from dataclasses import dataclass
 from pathlib import Path
 
 import comtypes
@@ -25,6 +26,10 @@ import win32process
 import winerror
 from PIL import Image, ImageDraw
 from pycaw.pycaw import AudioUtilities
+from winrt.windows.media.control import (
+    GlobalSystemMediaTransportControlsSessionManager as MediaManager,
+    GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus,
+)
 
 APP_NAME = "SpotifyAdMuter"
 POLL_SECONDS = 0.5
@@ -57,10 +62,36 @@ def spotify_title(pids: set[int]) -> str | None:
     return titles[0] if titles else None
 
 
-def is_ad(title: str) -> bool:
-    if title in PAUSED_TITLES:
-        return False
-    return " - " not in title
+@dataclass
+class MediaInfo:
+    playing: bool
+    artist: str
+
+
+class SpotifyMedia:
+    """Reads Spotify's entry in the Windows media controls (the volume flyout)."""
+
+    def __init__(self) -> None:
+        self.loop = asyncio.new_event_loop()
+        self.manager = self.loop.run_until_complete(MediaManager.request_async())
+
+    def read(self) -> MediaInfo | None:
+        for session in self.manager.get_sessions():
+            if "spotify" in session.source_app_user_model_id.lower():
+                props = self.loop.run_until_complete(session.try_get_media_properties_async())
+                status = session.get_playback_info().playback_status
+                return MediaInfo(status == PlaybackStatus.PLAYING, props.artist or "")
+        return None
+
+
+def is_ad(title: str | None, media: MediaInfo | None) -> bool:
+    # Ads, including Spotify's own promos, are reported with no artist.
+    if media is not None:
+        if not media.playing:
+            return False
+        if not media.artist:
+            return True
+    return title is not None and title not in PAUSED_TITLES and " - " not in title
 
 
 def set_spotify_mute(pids: set[int], mute: bool) -> None:
@@ -118,6 +149,7 @@ class AdMuter:
         self.enabled = True
         self.muted = True  # Clears a leftover mute from a previous crash on first poll.
         self.stop = threading.Event()
+        self.media: SpotifyMedia | None = None
         self.icon = pystray.Icon(
             APP_NAME,
             ICONS["on"],
@@ -159,6 +191,10 @@ class AdMuter:
     def worker(self, icon: pystray.Icon) -> None:
         comtypes.CoInitialize()
         icon.visible = False
+        try:
+            self.media = SpotifyMedia()
+        except Exception:
+            self.media = None
         while not self.stop.is_set():
             try:
                 self.poll(icon)
@@ -175,7 +211,11 @@ class AdMuter:
 
         icon.visible = True
         title = spotify_title(pids)
-        should_mute = self.enabled and title is not None and is_ad(title)
+        try:
+            media = self.media.read() if self.media else None
+        except Exception:
+            media = None
+        should_mute = self.enabled and is_ad(title, media)
         if should_mute or self.muted:
             set_spotify_mute(pids, should_mute)
         self.muted = should_mute
